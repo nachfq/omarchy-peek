@@ -1,0 +1,40 @@
+name: Checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  collectors:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Collector unit tests
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+  qml:
+    runs-on: ubuntu-24.04
+    container: archlinux:base
+    env:
+      OMARCHY_PATH: /tmp/peek-omarchy
+      QT_QUICK_BACKEND: software
+    steps:
+      - name: Install test tools
+        run: pacman -Syu --noconfirm git jq python qt6-declarative qt6-svg quickshell dbus ttf-dejavu
+      - uses: actions/checkout@v4
+      - name: Fetch the Omarchy 4.0.4 shell contract
+        run: |
+          git init "$OMARCHY_PATH"
+          git -C "$OMARCHY_PATH" fetch --depth=1 https://github.com/basecamp/omarchy.git c668141e9c42b13c80c9ca4ea108e11708c5e8a5
+          git -C "$OMARCHY_PATH" checkout --detach FETCH_HEAD
+      - name: Validate manifest and QML
+        run: |
+          bash "$OMARCHY_PATH/bin/omarchy-plugin-validate" .
+          scripts/check_qml.sh
+      - name: Exercise native input and request lifecycle
+        run: |
+          useradd --create-home peek-ci
+          chown -R peek-ci "$GITHUB_WORKSPACE"
+          runuser -u peek-ci -- python3 scripts/test_ui.py
+          runuser -u peek-ci -- env QT_SCALE_FACTOR=1.5 python3 scripts/test_ui.py
+      - name: Exercise the real collector protocol and cancellation
+        run: runuser -u peek-ci -- python3 scripts/test_integration.py
