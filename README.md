@@ -7,7 +7,7 @@ running services and worktrees. Each summary appears as its snapshot finishes.
 Choose a section for resource lists, search and full details; **Refresh** takes a
 new snapshot. Closing the panel stops active collection.
 
-![Peek Overview with synthetic sample data](docs/images/overview.png)
+![Peek Overview with synthetic sample data](preview.png)
 
 | Section | What it shows |
 | --- | --- |
