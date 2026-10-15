@@ -1,5 +1,5 @@
 ---
-{"id":"mvp","title":"Release Peek 0.1.0 for on-demand system inspection","status":"active","depends_on":[]}
+{"id":"mvp","title":"Release Peek 0.1.0 for on-demand system inspection","status":"done","depends_on":[]}
 ---
 
 # Release Peek 0.1.0
@@ -90,19 +90,24 @@ untouched by automated tests; isolated runtime/config locations cover integratio
   official manifest/QML checks, UI scale 1 and real offscreen integration.
   Both UI scales pass after the native focus correction. Native focus, placement,
   Escape and actual collector cancellation passed; six diagnostic repeats passed
-  after two earlier transient dismissals/results failed the manual harness.
+  after two earlier runs failed the snapshot assertion in the manual harness.
   Their cause was not established; desktop interaction can dismiss the popup.
   The harness now identifies a popup dismissal explicitly.
-- **T6** (S6–S7), active, depends T5, owner coordinator: finish plan evidence,
+- **T6** (S6–S7), done, depends T5, owner coordinator: finish plan evidence,
   publish integration PR, verify CI, merge under user's release authorization,
-  validate default-branch install content and publish `v0.1.0` release.
+  validate default-branch install content and publish `v0.1.0` release. Completed:
+  [PR #1](https://github.com/nachfq/omarchy-peek/pull/1) merged after collector and
+  QML/integration CI passed, including
+  [the PR run](https://github.com/nachfq/omarchy-peek/actions/runs/38748583613).
+  A fresh public clone matched the reviewed tree and passed official manifest
+  validation and an isolated collector check. Release
+  [v0.1.0](https://github.com/nachfq/omarchy-peek/releases/tag/v0.1.0) is published
+  from `efdc0fa77bc0c327f29d0b2716dfc07cd43210fb`. No host plugin installation
+  or marketplace submission was performed.
 
 ## Next delivery
 
-Autonomous scope: D1–D3, explicitly requested by the user. No intermediate human
-checkpoint is required for this agreed MVP; unresolved consequential product
-changes must still be surfaced. Current checkpoint: both worker branches are integrated. The 31 collector tests
-and real Python/QML integration pass, including cancellation of a blocked command.
-Native Wayland focus, placement and Escape pass for all five sections; cancellation
-also passes. T5 is complete with no actionable review findings. T6 is publishing the integration
-PR and checking remote CI before merging and releasing v0.1.0.
+No further delivery is scheduled. Autonomous scope D1–D3 is complete. The MVP release is published and the release
+commit is immutable evidence of the validated source. This final context update
+records publication without changing the released application. Future product
+work and marketplace submission require a new agreed delivery.

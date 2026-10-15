@@ -34,4 +34,11 @@ GitHub release. This includes commits, pushes and necessary PR integration.
 The coordinator maintains the plan and release evidence; implementers work in
 separate branches/worktrees from a shared committed baseline.
 
-Current plan: [MVP release](plans/mvp/plan.md).
+Completed plan: [MVP release](plans/mvp/plan.md). Version `v0.1.0` is published:
+https://github.com/nachfq/omarchy-peek/releases/tag/v0.1.0.
+
+For follow-up changes, run the collector unit tests, manifest/QML validation, UI
+input tests at scales 1 and 1.5, and the actual collector/UI integration harness
+as appropriate. `docs/DEVELOPMENT.md` documents the isolated checks. Native
+Wayland testing is an optional manual desktop check; outside clicks dismiss its
+popup. No plugin was installed into the user's running shell during delivery.
