@@ -54,20 +54,22 @@ untouched by automated tests; isolated runtime/config locations cover integratio
 ## Tasks
 
 ### D1 Shared foundation
-- **T1** (S7, S4), active, owner coordinator: verify shell/reference contracts,
+- **T1** (S7, S4), done, owner coordinator: verify shell/reference contracts,
   write context/plan/protocol, initialize a shared Git baseline. Verify plan
-  reader, ignore policy, clean baseline and branch identities.
+  reader, ignore policy, clean baseline and branch identities. Evidence: reader
+  discovered `mvp`; context is trackable; baseline `94266cc` is committed and both
+  implementers branched from it. The public default branch is `main`.
 
 ### D2 Parallel implementation
-- **T2** (S1–S3, S5), pending, depends T1, owner collector implementer:
+- **T2** (S1–S3, S5), active, depends T1, owner collector implementer:
   implement `scripts/peek.py`, `peek/` package if needed and
   `tests/test_collectors.py`/collector fixtures. Verify portable unit tests,
   failure/cancellation behavior and real read-only smoke collection.
-- **T3** (S1, S3–S5), pending, depends T1, owner UI implementer: implement root QML,
+- **T3** (S1, S3–S5), active, depends T1, owner UI implementer: implement root QML,
   `Model.js` if needed, `manifest.json`, `tests/ui/`, `tests/*qml*`,
   `scripts/check_qml.sh`, `scripts/test_ui.py`. Verify manifest, lint and native
   input/lifecycle tests at scales 1 and 1.5 using a fake collector.
-- **T4** (S6), pending, depends T1, owner coordinator: README/license, usage and
+- **T4** (S6), active, depends T1, owner coordinator: README/license, usage and
   development docs, portable and QML CI, release validation scripts as needed.
 
 ### D3 Integrate and publish
@@ -83,5 +85,6 @@ untouched by automated tests; isolated runtime/config locations cover integratio
 
 Autonomous scope: D1–D3, explicitly requested by the user. No intermediate human
 checkpoint is required for this agreed MVP; unresolved consequential product
-changes must still be surfaced. Current checkpoint: establishing T1 before
-launching the two independent implementers. No application checks run yet.
+changes must still be surfaced. Current checkpoint: T2 and T3 are running in independent
+implementer worktrees; the coordinator is preparing T4 documentation and CI.
+Application validation awaits implementation; foundation checks passed.
