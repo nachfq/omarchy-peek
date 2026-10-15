@@ -59,6 +59,10 @@ when saved; open Peek and refresh the relevant section to collect new results.
 
 ## Troubleshooting
 
+After `omarchy plugin update nachfq.peek`, if the bar still opens the old
+interface, run `omarchy restart shell` once to reload cached QML. The bar briefly
+restarts; plugin settings and placement remain in the user configuration.
+
 If a section reports a missing tool, check that its executable is available in
 the Omarchy shell's PATH. Peek does not install dependencies or start services.
 Docker access follows the current user's existing Docker configuration. Processes

@@ -15,7 +15,7 @@ Closing the popup stops collection. UI and project documentation are English.
 ## Repository and reference
 
 - Repository: https://github.com/nachfq/omarchy-peek (public, personal account).
-- Plugin ID: `nachfq.peek`; initial release: `v0.1.0`; license: MIT.
+- Plugin ID: `nachfq.peek`; current release: `v0.2.0`; license: MIT.
 - Reference: https://github.com/nachfq/omarchy-yuragi, also available as the sibling
   `../omarchy-yuragi`. Reuse its Omarchy-native bar/popup integration and isolated
   input-test patterns, not its audio subsystem or audio-specific restrictions.
@@ -44,7 +44,10 @@ Wayland testing is an optional manual desktop check; outside clicks dismiss its
 popup. After release, Peek was installed and placed beside Yuragi at the user's
 request. Host-specific settings remain outside Git.
 
-Active delivery: [At-a-glance UI/UX](plans/at-a-glance/plan.md). The user requested
-an autonomous improvement iteration through a new release and installation update.
-The current priority is visible resource summaries and progressive disclosure of
-details, preserving truthful incomplete measurements and on-demand behavior.
+Completed follow-up: [At-a-glance UI/UX](plans/at-a-glance/plan.md), released as
+[v0.2.0](https://github.com/nachfq/omarchy-peek/releases/tag/v0.2.0) and installed.
+Peek now opens on Overview with Docker, running services and worktree summaries;
+section details and diagnostics use progressive disclosure. Incomplete and
+unavailable measurements remain explicit. The installed shell needed one restart
+to replace cached plugin QML after update; its settings and placement were preserved.
+No active delivery remains; use subsequent user feedback to bound the next change.
