@@ -37,6 +37,9 @@ Run this manual check without interacting with the desktop: outside clicks dismi
 the popup. It does not install the plugin or change the running shell configuration.
 
 To capture synthetic UI data: `python3 scripts/test_ui.py --capture /tmp/peek.png`.
+The default preview is Overview; add `--capture-section worktrees` (or another
+section name) for its resource list. Only synthetic previews belong in Git;
+real system snapshots and desktop screenshots stay private.
 
 ## Read-only manual collection
 
@@ -54,11 +57,13 @@ issues unless reviewed and redacted. The fixture data in tests is synthetic.
 ## Release
 
 1. Verify the integrated diff, portable tests, QML checks and native input tests.
-2. Compare real collector results with the underlying tools and inspect the popup.
+2. Compare real collector results with the underlying tools and inspect the
+   Overview and priority section previews at scales 1 and 1.5. Confirm diagnostics
+   are collapsed, unknown sizes are not zero, and long paths remain readable.
 3. Complete the independent delivery review and address concrete findings.
 4. Merge the reviewed integration PR after CI passes.
 5. Verify the public default-branch contents and manifest version.
-6. Tag that exact commit as `v0.1.0` and publish the GitHub release notes.
+6. Tag that exact commit with the manifest release version and publish the GitHub release notes.
 
 The GitHub source archives are the release artifacts; no binary compilation or
 package registry is needed. Marketplace submission is a separate action.

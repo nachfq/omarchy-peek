@@ -53,6 +53,22 @@ ShellRoot {
                 verify(panel !== null && content !== null);
                 var cancelTest = Quickshell.env('PEEK_TEST_MODE') === 'cancel';
                 var sections = ['docker', 'services', 'processes', 'worktrees', 'disk'];
+                if (!cancelTest) {
+                    compare(panel.selectedSection, -1);
+                    widget.open();
+                    tryCompare(panel.collector, 'loading', false, 65000);
+                    ensure(widget.opened, 'Overview dismissed during manual check');
+                    ['docker', 'services', 'worktrees'].forEach(function(section) {
+                        var result = panel.collector.snapshots[section];
+                        ensure(result !== null && result !== undefined, 'Missing overview ' + section);
+                        compare(result.section, section);
+                        compare(panel.collector.errors[section], '');
+                    });
+                    ensure(panel.collector.snapshots.processes === undefined, 'Overview must not scan processes');
+                    ensure(panel.collector.snapshots.disk === undefined, 'Overview must not scan disk');
+                    console.log('PEEK_REAL_OVERVIEW verified');
+                    closeAndVerify(panel, content);
+                }
                 for (var index = 0; index < (cancelTest ? 1 : sections.length); index++) {
                     panel.selectedSection = index;
                     widget.open();
@@ -68,21 +84,24 @@ ShellRoot {
                         compare(panel.collector.snapshot.section, sections[index]);
                         console.log('PEEK_REAL_SECTION ' + sections[index] + ' ' + panel.collector.snapshot.status);
                     }
-                    if (Quickshell.env('PEEK_TEST_WAYLAND') === '1') {
-                        tryVerify(function() { return content.initialFocus !== null && content.initialFocus.activeFocus; }, 3000);
-                        var surface = content.QsWindow.window;
-                        ensure(surface.backingWindowVisible, 'native surface visible');
-                        ensure(surface.cardOrigin.x >= 0 && surface.cardOrigin.y >= 0, 'card origin');
-                        ensure(surface.cardOrigin.x + surface.contentWidth <= surface.screenW, 'card width');
-                        ensure(surface.cardOrigin.y + surface.contentHeight <= surface.screenH, 'card height');
-                        content.initialFocus.forceActiveFocus();
-                        keyClick(Qt.Key_Escape);
-                    } else widget.close();
-                    tryCompare(widget, 'opened', false);
-                    tryCompare(panel.collector, 'active', false, 5000);
-                    wait(200);
-                    verify(!panel.collector.active && !panel.collector.loading);
+                    closeAndVerify(panel, content);
                 }
+            }
+            function closeAndVerify(panel, content) {
+                if (Quickshell.env('PEEK_TEST_WAYLAND') === '1') {
+                    tryVerify(function() { return content.initialFocus !== null && content.initialFocus.activeFocus; }, 3000);
+                    var surface = content.QsWindow.window;
+                    ensure(surface.backingWindowVisible, 'native surface visible');
+                    ensure(surface.cardOrigin.x >= 0 && surface.cardOrigin.y >= 0, 'card origin');
+                    ensure(surface.cardOrigin.x + surface.contentWidth <= surface.screenW, 'card width');
+                    ensure(surface.cardOrigin.y + surface.contentHeight <= surface.screenH, 'card height');
+                    content.initialFocus.forceActiveFocus();
+                    keyClick(Qt.Key_Escape);
+                } else widget.close();
+                tryCompare(widget, 'opened', false);
+                tryCompare(panel.collector, 'active', false, 5000);
+                wait(200);
+                verify(!panel.collector.active && !panel.collector.loading);
             }
             function cleanupTestCase() {
                 widget.close();

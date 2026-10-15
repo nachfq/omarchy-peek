@@ -1,9 +1,31 @@
 # Using Peek
 
-Click the Peek icon in the Omarchy bar. Opening a section collects one snapshot;
-**Refresh** collects it again. The result displays its collection timestamp.
-Switching sections cancels the current request. Closing the panel stops collection.
+Click the magnifying-glass icon in the Omarchy bar. **Overview** collects Docker,
+services and worktrees in sequence and shows each result as it arrives. It does
+not scan the Processes or Disk sections until you select them.
+
+Choose a section to inspect its resource lists. **Refresh** collects the current
+view again. Switching views cancels the active query; closing stops collection.
 There is no refresh interval, scheduled scan, cleanup action or persistent history.
+
+The main numbers are labeled observations, not a cleanup score. Docker categories
+are separate disk estimates. Services distinguish user and system units;
+“user service” does not imply that an agent created it. Worktree sizes are
+independent measurements and are not added into a unique disk-usage total.
+
+## Read the result
+
+Filesystem and memory sizes use binary units (KiB, MiB, GiB); Docker keeps its
+reported units. `≥` marks a partially scanned
+lower bound; **Not measured** means no size observation was available, never zero.
+An empty successful result differs from an unavailable query. A small status
+indicator preserves incomplete/unavailable states without filling the view with
+technical messages. Expand diagnostics for their causes and accounting notes.
+
+Services initially focuses on running user services. Scope and state filters let
+you inspect system units and inactive services too. Resource lists prioritize
+measured consumption where sizes are available; full fields remain accessible in
+the detailed view. Collection timestamps describe snapshot time, not creation time.
 
 ## Choose paths
 
@@ -34,18 +56,6 @@ Peek does not claim their sum is a system-wide total.
 
 Settings are read on a subsequent request. Omarchy reloads its shell configuration
 when saved; open Peek and refresh the relevant section to collect new results.
-
-## Read the result
-
-- **OK:** the requested collection completed within its stated scope.
-- **Partial:** some data was collected, with omitted or inaccessible portions
-  explained in the notes.
-- **Error:** the section could not produce its requested data. An unavailable
-  Docker daemon, for example, is not reported as zero containers.
-
-The timestamps describe when data was collected, not when a resource was created.
-A service being enabled differs from it currently running. A stopped container
-or old worktree remains a resource; Peek does not classify it as garbage.
 
 ## Troubleshooting
 

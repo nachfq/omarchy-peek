@@ -43,6 +43,7 @@ def isolated_process(command, env):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--capture', type=Path, help='save a reproducible popup PNG')
+    parser.add_argument('--capture-section', choices=['overview', 'docker', 'services', 'worktrees', 'processes', 'disk'], default='overview')
     args = parser.parse_args()
     root = Path(__file__).resolve().parent.parent
     shell = Path(os.environ.get('OMARCHY_PATH', '/usr/share/omarchy')) / 'shell'
@@ -68,7 +69,7 @@ def main():
         # unchanged native UI from reading or writing the user's desktop files.
         env = dict(os.environ, QT_QPA_PLATFORM='offscreen', QT_QPA_PLATFORMTHEME='',
                    QT_QUICK_BACKEND='software', PEEK_TEST_LOG=str(log),
-                   PEEK_TEST_HOME=str(fixture / 'home'),
+                   PEEK_TEST_HOME=str(fixture / 'home'), PEEK_PREVIEW_SECTION=args.capture_section,
                    XDG_CONFIG_HOME=str(fixture / 'config'), XDG_CACHE_HOME=str(fixture / 'cache'),
                    XDG_DATA_HOME=str(fixture / 'data'), XDG_RUNTIME_DIR=str(fixture / 'runtime'))
         Path(env['XDG_RUNTIME_DIR']).mkdir(mode=0o700)

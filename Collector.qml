@@ -12,10 +12,16 @@ Item {
     property Request requestProcess: null
     property int generation: 0
     property var pending: null
+    property var queue: []
+    property var snapshots: ({})
+    property var errors: ({})
+    property string currentSection: ''
+    property var requestSettings: ({})
 
     function cancel() {
         generation++;
         pending = null;
+        queue = [];
         loading = false;
         if (requestProcess) requestProcess.cancel();
     }
@@ -25,8 +31,17 @@ Item {
         snapshot = null;
         error = '';
         loading = true;
+        currentSection = section;
         pending = {section: section, options: JSON.stringify(Model.options(settings)), generation: generation};
         pump();
+    }
+
+    function overview(settings) {
+        request('docker', settings);
+        snapshots = ({});
+        errors = ({});
+        requestSettings = settings;
+        queue = ['services', 'worktrees'];
     }
 
     function pump() {
@@ -51,6 +66,24 @@ Item {
             }
         }
         requestProcess = null;
+        if (process.generation === generation) {
+            var saved = Object.assign({}, snapshots);
+            var failures = Object.assign({}, errors);
+            saved[process.section] = snapshot;
+            failures[process.section] = error;
+            snapshots = saved;
+            errors = failures;
+            if (queue.length) {
+                var remaining = queue.slice();
+                var section = remaining.shift();
+                queue = remaining;
+                loading = true;
+                currentSection = section;
+                error = '';
+                snapshot = null;
+                pending = {section: section, options: JSON.stringify(Model.options(requestSettings)), generation: generation};
+            }
+        }
         Qt.callLater(root.pump);
     }
 

@@ -41,7 +41,10 @@ not include command environments, secrets or full process arguments.
 `status` is `ok`, `partial`, or `error`. All displayed cell values are strings.
 `notes` is a list of factual messages, including errors, skipped paths, access
 limits, and explicit truncation. Table IDs and columns are section-defined; the
-UI renders them generically with scrollable content and readable long paths.
+UI presents section summaries and resource lists, with raw tables and diagnostics
+available on demand. A table may include `status: "ok" | "partial" | "error"` to
+identify its own coverage; an absent status falls back conservatively to the
+snapshot status. Failed collection must never be summarized as a confirmed zero.
 Never render returned strings as rich text. The UI may filter rows locally.
 Rows must not contain synthetic cleanup suggestions or abandonment judgments.
 Missing tools/access must be distinguishable from a successful empty result.
@@ -49,6 +52,10 @@ Missing tools/access must be distinguishable from a successful empty result.
 ## Lifecycle
 
 Collection begins only when a visible section is selected/opened or refreshed.
+The Overview view sequences Docker, services and worktrees on demand, presenting
+results incrementally with their individual collection times. It never starts
+process/disk queries implicitly. Closing or selecting a detail section cancels the
+sequence and active request. It does not periodically refresh retained snapshots.
 Switching sections cancels the previous active request. Reopening refreshes the
 selected section. Each UI instance owns at most one active collector; retained
 snapshots are memory-only. Ignore stale completions from cancelled requests.
@@ -72,7 +79,8 @@ No subprocesses or timers perform collection while the popup is closed.
   repository. Resolve configured root symlinks and directory aliases safely,
   avoid cycles, and avoid descending into linked worktrees as duplicate repos.
   Show registered path, branch/detached state, working-tree changes and measured
-  allocated size; missing/locked worktrees remain factual rows. Use
+  allocated size; complete/partial/unavailable distinguishes a measured value,
+  a lower bound and no observation. Never emit numeric zero for an unstarted scan; missing/locked worktrees remain factual rows. Use
   `GIT_OPTIONAL_LOCKS=0`; no fetch, prune, checkout or index writes. Bound expensive
   discovery, status and size operations; report incomplete results explicitly.
 - Disk: configured path totals and immediate children of the first existing
@@ -83,3 +91,13 @@ No subprocesses or timers perform collection while the popup is closed.
 Read-only portable unit tests cover parsing, missing tools, inaccessible paths,
 timeouts, cancellation and path names containing spaces/unicode. A fake backend
 may be used for UI tests, but release validation must also invoke real collectors.
+
+## Size presentation
+
+Display allocated bytes in readable binary units. A partial measured size is a
+lower bound (`≥`), not an exact total. An unavailable size is “Not measured”.
+Do not sum independently measured worktrees, configured paths or process RSS into
+an asserted unique-resource total. Docker usage categories remain separately
+labeled. Optional bounded GNU `du` measurement can provide complete sizes while
+Python's bounded fallback remains available; an unavailable inode count does not
+invalidate a complete byte measurement.

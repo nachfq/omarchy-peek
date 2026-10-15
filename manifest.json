@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "nachfq.peek",
   "name": "Peek",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "Nacho fq",
   "license": "MIT",
-  "description": "On-demand snapshots of Docker, services, processes, worktrees and disk usage.",
+  "description": "At-a-glance Docker, running services and worktree usage, with on-demand details.",
   "kinds": ["bar-widget"],
   "entryPoints": {"barWidget": "BarWidget.qml"},
   "barWidget": {

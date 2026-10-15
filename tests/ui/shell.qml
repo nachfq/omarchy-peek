@@ -1,5 +1,6 @@
 pragma ComponentBehavior: Bound
 import QtQuick
+import QtQuick.Window
 import QtTest
 import Quickshell
 import qs.Ui as Ui
@@ -51,7 +52,11 @@ ShellRoot {
                 return found;
             }
             function keySequence(text) { for (var i = 0; i < text.length; i++) keyClick(text[i]); }
-            function click(item) { mouseClick(item, item.width / 2, item.height / 2); }
+            function click(item) {
+                // A model/filter change can move controls before the next frame.
+                ensure(waitForPolish(item.Window.window, 1000), 'Click target layout settled: ' + item.objectName);
+                mouseClick(item, item.width / 2, item.height / 2);
+            }
             function waitSnapshot() {
                 tryCompare(panel.collector, 'loading', false, 5000);
                 ensure(panel.collector.error === '', panel.collector.error);
@@ -116,7 +121,7 @@ ShellRoot {
                     waitSnapshot();
                     equal(panel.collector.snapshot.section, Model.sections[index]);
                     if (index === 2) ensure(child('snapshotStatus').text.indexOf('Unavailable') === 0);
-                    if (index === 3) ensure(content.displayRows.some(function(row) { return row.text === 'No entries.'; }));
+                    if (index === 3) ensure(content.displayRows.some(function(row) { return row.value === 'Not measured'; }));
                 }
             }
             function test_localFilteringAndLiteralText() {
@@ -126,10 +131,10 @@ ShellRoot {
                 click(filter);
                 keySequence('literal');
                 equal(panel.collector.snapshot, original);
-                equal(content.displayRows.filter(function(row) { return row.kind === 'row'; }).length, 1);
-                var textRow = content.displayRows.filter(function(row) { return row.kind === 'row'; })[0];
-                equal(textRow.cells[0], 'sample <b>literal</b>');
-                ensure(textRow.cells[1].indexOf('日本語') >= 0);
+                equal(content.displayRows.filter(function(row) { return row.kind === 'entry'; }).length, 1);
+                var textRow = content.displayRows.filter(function(row) { return row.kind === 'entry'; })[0];
+                equal(textRow.text, 'sample <b>literal</b>');
+                ensure(textRow.secondary.indexOf('日本語') >= 0);
                 filter.selectAll();
                 keySequence('no such fixture');
                 ensure(content.displayRows.some(function(row) { return row.text === 'No matching rows.'; }));
@@ -211,7 +216,8 @@ ShellRoot {
                 var valid = {schemaVersion: 1, section: 'docker', status: 'ok', collectedAt: 'fixture', summary: '', tables: [], notes: []};
                 equal(Model.parse(JSON.stringify(valid), 'docker').status, 'ok');
                 var invalid = [Object.assign({}, valid, {schemaVersion: 2}), Object.assign({}, valid, {section: 'disk'}),
-                    Object.assign({}, valid, {status: 'unknown'}), Object.assign({}, valid, {notes: [42]}),
+                    Object.assign({}, valid, {status: 'unknown'}),
+                    Object.assign({}, valid, {tables: [{id:'x',title:'x',status:'unknown',columns:[{key:'n',label:'N'}],rows:[]}]}), Object.assign({}, valid, {notes: [42]}),
                     Object.assign({}, valid, {tables: [{id: 'x', title: 'x', columns: [{key: 'n', label: 'N'}], rows: [{n: 42}]}]})];
                 invalid.forEach(function(data) {
                     var failed = false;
@@ -231,14 +237,120 @@ ShellRoot {
                 tryCompare(panel.collector, 'active', false);
                 ensure(panel.collector.snapshot === null);
             }
-            function test_responsiveAndPreview() {
+            function test_overviewMeaningAndSequence() {
+                panel.selectedSection = -1;
                 open();
+                ensure(panel.collector.snapshots.docker !== undefined);
+                ensure(panel.collector.snapshots.services !== undefined);
+                ensure(panel.collector.snapshots.worktrees !== undefined);
+                var docker = Model.overview('docker', panel.collector.snapshots.docker, '', false);
+                equal(docker.metric, '9.3 GB');
+                equal(docker.lines[3].value, '4');
+                equal(Model.rows(panel.collector.snapshots.docker, '', {})[0].text, 'Docker disk usage · 4');
+                var services = Model.overview('services', panel.collector.snapshots.services, '', false);
+                equal(services.metric, '2');
+                equal(services.lines[0].value, '1');
+                var worktrees = Model.overview('worktrees', panel.collector.snapshots.worktrees, '', false);
+                equal(worktrees.metric, '≥ 4.00 GiB');
+                equal(worktrees.lines[0].value, '≥ 4');
+                equal(worktrees.lines[1].value, '2 / 4');
+                var saved = panel.collector.snapshots;
+                wait(250);
+                equal(panel.collector.snapshots, saved);
+                ensure(!panel.collector.active);
+                child('section-1').forceActiveFocus();
+                keyClick(Qt.Key_Escape);
+                ensure(!widget.opened);
+            }
+            function test_overviewCancelOnSwitch() {
+                panel.selectedSection = -1;
+                widget.open();
+                wait(35);
+                click(child('section1'));
+                waitSnapshot();
+                equal(panel.collector.snapshot.section, 'services');
+                wait(250);
+                equal(panel.collector.snapshot.section, 'services');
+                ensure(!panel.collector.active);
+            }
+            function test_overviewCloseAndReopen() {
+                panel.selectedSection = -1;
+                widget.open();
+                wait(35);
+                widget.close();
+                ensure(!panel.collector.loading);
+                widget.open();
+                waitSnapshot();
+                ensure(!!panel.collector.snapshots.worktrees);
+                ensure(!panel.collector.active);
+            }
+            function test_overviewFailuresRemainVisible() {
+                panel.selectedSection = -1;
+                widget.settings = {discoveryDepth: 0};
+                widget.open();
+                tryCompare(panel.collector, 'loading', false, 5000);
+                ensure(!!panel.collector.errors.docker);
+                ensure(!!panel.collector.errors.services);
+                ensure(!!panel.collector.errors.worktrees);
+                ensure(child('refreshButton').enabled);
+                equal(Model.overview('docker', null, panel.collector.errors.docker, false).status, 'Unavailable');
+                widget.settings = {discoveryDepth: 2};
+                click(child('refreshButton'));
+                waitSnapshot();
+                ensure(!!panel.collector.snapshots.worktrees);
+            }
+            function test_notesFiltersAndSizes() {
+                open();
+                ensure(!content.displayRows.some(function(row) { return row.kind === 'note'; }), 'Notes must start collapsed');
+                click(child('notesToggle'));
+                tryVerify(function() { return content.displayRows.some(function(row) { return row.kind === 'note'; }); }, 1000, 'Notes open on click');
+                wait(30);
+                click(child('rawToggle'));
+                tryVerify(function() { return content.displayRows.some(function(row) { return row.text.indexOf('Images') === 0; }); }, 1000, 'All data includes images');
+                click(child('section1'));
+                waitSnapshot();
+                equal(content.displayRows.filter(function(row) { return row.kind === 'entry'; }).length, 2);
+                click(child('scopesystem'));
+                equal(content.displayRows.filter(function(row) { return row.kind === 'entry'; }).length, 1);
+                click(child('scopeall'));
+                click(child('allStates'));
+                equal(content.displayRows.filter(function(row) { return row.kind === 'entry'; }).length, 5);
+                click(child('section3'));
+                waitSnapshot();
+                var entries = content.displayRows.filter(function(row) { return row.kind === 'entry'; });
+                equal(entries[0].text, 'workspace');
+                equal(entries[0].value, '≥ 4.00 GiB');
+                equal(entries[3].value, 'Not measured');
+                equal(Model.bytes('0', 'complete'), '0 B');
+                equal(Model.bytes('unavailable', 'unavailable'), 'Not measured');
+                ensure(!panel.collector.active);
+            }
+            function test_emptyAndUnavailableCoverage() {
+                var empty = {status:'ok', section:'docker', tables:[{id:'containers', title:'Containers', status:'ok', columns:[{key:'State',label:'State'}],rows:[]}],notes:[]};
+                equal(Model.count(empty, 'containers'), '0');
+                empty.tables[0].status = 'error';
+                equal(Model.count(empty, 'containers'), 'Unavailable');
+                ensure(Model.rows(empty, '', {}).some(function(row) { return row.text.indexOf('Unavailable') === 0; }));
+                delete empty.tables[0].status;
+                empty.status = 'partial';
+                equal(Model.count(empty, 'containers'), 'Unknown');
+                empty.tables.push({id:'usage', status:'error', rows:[{Type:'Images',Size:'9GB'}]});
+                equal(Model.overview('docker', empty, '', false).metric, 'Unavailable');
+            }
+            function test_responsiveAndPreview() {
+                panel.selectedSection = -1;
+                open();
+                var captureSection = Quickshell.env('PEEK_PREVIEW_SECTION');
+                if (captureSection && captureSection !== 'overview') {
+                    click(child('section' + Model.sections.indexOf(captureSection)));
+                    waitSnapshot();
+                }
                 var window = findChild(panel, 'peekSurface');
                 var originalWidth = window.testAvailableWidth;
                 window.testAvailableWidth = 352;
                 wait(60);
                 ensure(child('section4').y > child('section0').y, 'Sections should wrap');
-                ensure(child('snapshotRows').height > 0);
+                ensure((panel.selectedSection === -1 ? child('overview') : child('snapshotRows')).height > 0);
                 window.testAvailableWidth = originalWidth;
                 wait(150);
                 var output = Quickshell.env('PEEK_PREVIEW_PATH');

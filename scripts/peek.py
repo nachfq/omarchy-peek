@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import selectors
+import shutil
 import signal
 import stat
 import subprocess
@@ -57,19 +58,23 @@ class Snapshot:
                      "status": "ok", "summary": "", "tables": [], "notes": []}
         self.failed = False
         self.successes = 0
+        self.failures = 0
 
     def note(self, message, failure=False):
         if message not in self.data["notes"]:
             self.data["notes"].append(message)
         self.failed |= failure
+        self.failures += int(failure)
 
-    def table(self, ident, title, columns, rows):
+    def table(self, ident, title, columns, rows, status="ok"):
         if len(rows) > MAX_ROWS:
             self.note(f"{title}: truncated to {MAX_ROWS} rows.", True)
-        self.data["tables"].append({"id": ident, "title": title,
+            status = "partial"
+        self.data["tables"].append({"id": ident, "title": title, "status": status,
                                     "columns": [{"key": key, "label": label} for key, label in columns],
                                     "rows": [{key: text(row.get(key, "")) for key, _ in columns}
                                              for row in rows[:MAX_ROWS]]})
+        return self.data["tables"][-1]
 
     def finish(self, summary):
         self.data["summary"] = summary
@@ -220,9 +225,11 @@ def collect_docker(snapshot, options, budget):
         fmt = ('{"Names":{{json .Names}},"State":{{json .State}},"Status":{{json .Status}},'
                '"Ports":{{json .Ports}},"composeProject":{{json (.Label "com.docker.compose.project")}}}'
                if ident == "containers" else "{{json .}}")
+        failures = snapshot.failures
         raw = command(snapshot, budget, ["docker", *args, "--format", fmt])
         rows = records(snapshot, raw, title)
-        snapshot.table(ident, title, columns, rows)
+        snapshot.table(ident, title, columns, rows,
+                       "ok" if snapshot.failures == failures else "error")
         if ident == "containers":
             count = len(rows)
     snapshot.note("Docker reports size estimates. Shared image layers are not additive; Docker's reclaimable field is tool-reported, not a cleanup recommendation.")
@@ -242,37 +249,54 @@ def timer_time(value):
 
 
 def collect_services(snapshot, options, budget):
-    services, timers = [], []
-    for scope, scope_args in (("system", []), ("user", ["--user"])):
-        base = ["systemctl", *scope_args, "--no-pager", "--plain", "--output=json"]
-        raw = command(snapshot, budget, [*base, "list-units", "--type=service", "--all"])
-        active = records(snapshot, raw, f"{scope} services")
-        active_available = raw is not None
-        try:
-            json_records(raw)
-        except CollectionError:
-            active_available = False
-        raw = command(snapshot, budget, [*base, "list-unit-files", "--type=service"])
-        files = records(snapshot, raw, f"{scope} unit files")
-        units = {}
-        for row in files:
-            unit = row.get("unit_file", row.get("unit", ""))
-            units[unit] = {"scope": scope, "unit": unit, "enablement": row.get("state", ""),
-                           "active": "not loaded" if active_available else "unavailable", "sub": "", "description": ""}
-        for row in active:
-            unit = row.get("unit", "")
-            item = units.setdefault(unit, {"scope": scope, "unit": unit, "enablement": "unavailable"})
-            item.update(active=row.get("active", ""), sub=row.get("sub", ""), description=row.get("description", ""))
-        services.extend(units[key] for key in sorted(units))
-        raw = command(snapshot, budget, [*base, "list-timers", "--all"])
-        for row in records(snapshot, raw, f"{scope} timers"):
-            timers.append({"scope": scope, "unit": row.get("unit", ""),
-                           "activates": row.get("activates", ""), "next": timer_time(row.get("next")),
-                           "last": timer_time(row.get("last"))})
-    snapshot.table("services", "Services", [("scope", "Scope"), ("unit", "Unit"), ("active", "Active"),
-                   ("sub", "Substate"), ("enablement", "Unit-file state"), ("description", "Description")], services)
-    snapshot.table("timers", "Timers", [("scope", "Scope"), ("unit", "Timer"), ("activates", "Activates"),
-                   ("next", "Next (UTC)"), ("last", "Last (UTC)")], timers)
+    service_table = snapshot.table("services", "Services", [
+        ("scope", "Scope"), ("unit", "Unit"), ("active", "Active"), ("sub", "Substate"),
+        ("enablement", "Unit-file state"), ("description", "Description")], [], "error")
+    timer_table = snapshot.table("timers", "Timers", [("scope", "Scope"), ("unit", "Timer"),
+        ("activates", "Activates"), ("next", "Next (UTC)"), ("last", "Last (UTC)")], [], "error")
+    services, timers = service_table["rows"], timer_table["rows"]
+    service_sources, timer_sources = [], []
+
+    def read(args, label):
+        failures = snapshot.failures
+        raw = command(snapshot, budget, args)
+        rows = records(snapshot, raw, label)
+        return rows, snapshot.failures == failures
+
+    def coverage(table, sources, expected):
+        table["status"] = ("ok" if len(sources) == expected and all(sources)
+                           else "partial" if any(sources) else "error")
+        if len(table["rows"]) > MAX_ROWS:
+            del table["rows"][MAX_ROWS:]
+            table["status"] = "partial"
+            snapshot.note(f"{table['title']}: truncated to {MAX_ROWS} rows.", True)
+
+    try:
+        for scope, scope_args in (("system", []), ("user", ["--user"])):
+            base = ["systemctl", *scope_args, "--no-pager", "--plain", "--output=json"]
+            active, active_available = read([*base, "list-units", "--type=service", "--all"], f"{scope} services")
+            service_sources.append(active_available)
+            files, files_available = read([*base, "list-unit-files", "--type=service"], f"{scope} unit files")
+            service_sources.append(files_available)
+            units = {}
+            for row in files:
+                unit = row.get("unit_file", row.get("unit", ""))
+                units[unit] = {"scope": scope, "unit": unit, "enablement": row.get("state", ""),
+                               "active": "not loaded" if active_available else "unavailable", "sub": "", "description": ""}
+            for row in active:
+                unit = row.get("unit", "")
+                item = units.setdefault(unit, {"scope": scope, "unit": unit, "enablement": "unavailable"})
+                item.update(active=row.get("active", ""), sub=row.get("sub", ""), description=row.get("description", ""))
+            services.extend({key: text(value) for key, value in units[key].items()} for key in sorted(units))
+            rows, available = read([*base, "list-timers", "--all"], f"{scope} timers")
+            timer_sources.append(available)
+            for row in rows:
+                timers.append({"scope": scope, "unit": text(row.get("unit", "")),
+                               "activates": text(row.get("activates", "")), "next": timer_time(row.get("next")),
+                               "last": timer_time(row.get("last"))})
+    finally:
+        coverage(service_table, service_sources, 4)
+        coverage(timer_table, timer_sources, 2)
     snapshot.note("System and user managers are queried separately. Unit-file state is enablement, not activation; 'not loaded' means absent from list-units.")
     return snapshot.finish(f"{len(services)} services; {len(timers)} timers")
 
@@ -306,7 +330,11 @@ def read_limited(path, limit=65536):
 
 
 def collect_processes(snapshot, options, budget, proc_root=Path("/proc")):
-    processes, unavailable = [], 0
+    process_table = snapshot.table("processes", "Processes", [("pid", "PID"), ("name", "Name"),
+        ("rss", "RSS (bytes)"), ("cwd", "Current directory")], [], "error")
+    processes, unavailable = process_table["rows"], 0
+    failures = snapshot.failures
+    completed = False
     try:
         # Enumeration is capped before sorting, so even directory listing is bounded.
         pids = []
@@ -334,11 +362,15 @@ def collect_processes(snapshot, options, budget, proc_root=Path("/proc")):
                 unavailable += 1
             processes.append({"pid": pid, "name": name, "rss": rss, "cwd": cwd})
         snapshot.successes += 1
+        completed = True
     except (OSError, CollectionError) as exc:
         snapshot.note(f"Process inspection incomplete: {exc}", True)
+    finally:
+        process_table["status"] = ("ok" if completed and not unavailable and snapshot.failures == failures
+                                   else "partial" if processes else "error")
     if unavailable:
         snapshot.note(f"{unavailable} process fields/entries were inaccessible or disappeared during collection.", True)
-    snapshot.table("processes", "Processes", [("pid", "PID"), ("name", "Name"), ("rss", "RSS (bytes)"), ("cwd", "Current directory")], processes)
+    failures = snapshot.failures
     raw = command(snapshot, budget, ["ss", "--listening", "--tcp", "--udp", "--numeric", "--no-header", "--processes"])
     sockets = []
     if raw is not None:
@@ -347,7 +379,8 @@ def collect_processes(snapshot, options, budget, proc_root=Path("/proc")):
         except CollectionError as exc:
             snapshot.note(str(exc), True)
     snapshot.table("sockets", "Listening sockets", [("protocol", "Protocol"), ("state", "State"),
-                   ("local", "Local endpoint"), ("peer", "Peer endpoint"), ("process", "Process / PID")], sockets)
+                   ("local", "Local endpoint"), ("peer", "Peer endpoint"), ("process", "Process / PID")], sockets,
+                   "ok" if snapshot.failures == failures else "error")
     snapshot.note("RSS is resident memory, not unique memory. Socket process names/PIDs are shown only where ss has access; empty ownership is not proof of no owner. TCP listeners and UDP bound sockets are included.")
     return snapshot.finish(f"{len(processes)} processes; {len(sockets)} sockets")
 
@@ -372,6 +405,23 @@ def validate_options(options):
 
 
 def allocated_size(path, budget):
+    """Prefer bounded native scanning; retain a bounded portable fallback."""
+    budget.check()
+    if shutil.which("du"):
+        try:
+            raw = run_command(["du", "--summarize", "--one-file-system", "--block-size=1",
+                               "--null", "--", str(path)], budget, timeout=1.5)
+            value, separator, returned_path = raw.removesuffix("\x00").partition("\t")
+            if (raw.endswith("\x00") and raw.count("\x00") == 1 and separator
+                    and value.isascii() and value.isdecimal() and returned_path == str(path)):
+                return {"bytes": value, "entries": "unavailable", "measurement": "complete"}, []
+        except CollectionError:
+            pass
+        budget.check()
+    return allocated_size_python(path, budget)
+
+
+def allocated_size_python(path, budget):
     """Measure independently per row; never sum overlapping or shared measurements."""
     total, count = 0, 0
     seen = set()
@@ -412,16 +462,20 @@ def allocated_size(path, budget):
                         stack.append(Path(entry.path))
         except OSError:
             problems.append("inaccessible or disappeared entries")
-    return {"bytes": str(total), "entries": str(count), "measurement": "partial" if problems else "complete"}, sorted(set(problems))
+    return {"bytes": str(total) if count else "unavailable", "entries": str(count),
+            "measurement": ("partial" if count else "unavailable") if problems else "complete"}, sorted(set(problems))
 
 
 def measured_row(snapshot, path, budget):
     measurement, problems = allocated_size(path, budget)
     if problems:
-        snapshot.note(f"Size for {path}: {', '.join(problems)}.", True)
+        if budget.entries >= MAX_TOTAL_ENTRIES and measurement["entries"] == "0":
+            snapshot.note("Shared size scan budget exhausted; remaining paths were not measured.", True)
+        else:
+            snapshot.note(f"Size for {path}: {', '.join(problems)}.", True)
     else:
         snapshot.successes += 1
-    if int(measurement["entries"]):
+    if measurement["bytes"] != "unavailable":
         snapshot.successes += 1
     return {"path": str(path), **measurement}
 
@@ -430,28 +484,42 @@ def collect_disk(snapshot, options, budget):
     paths = configured_paths(options, "diskPaths")
     snapshot.note("Configured disk paths: " + (json.dumps([str(p) for p in paths], ensure_ascii=True) if paths else "none"))
     snapshot.note(SIZE_CAVEAT)
+    snapshot.note("Sizes use native du when available (1.5-second command limit); inode counts are unavailable for native scans. Python fallback scans are limited to 20000 entries per path and 100000 across the snapshot.")
     columns = [("path", "Path"), ("bytes", "Allocated bytes"), ("entries", "Inodes counted"), ("measurement", "Measurement")]
-    snapshot.table("paths", "Configured paths (independent measurements)", columns, [])
-    rows = snapshot.data["tables"][-1]["rows"]
-    snapshot.table("children", "Immediate children (independent measurements)", columns, [])
-    children = snapshot.data["tables"][-1]["rows"]
+    path_table = snapshot.table("paths", "Configured paths (independent measurements)", columns, [], "error")
+    child_table = snapshot.table("children", "Immediate children (independent measurements)", columns, [], "error")
+    rows, children = path_table["rows"], child_table["rows"]
     first_directory = None
-    for path in paths:
-        rows.append(measured_row(snapshot, path, budget))
-        if first_directory is None and path.is_dir():
-            first_directory = path
-    if first_directory is not None:
-        snapshot.note(f"Immediate children of {first_directory}; at most 100 children. Each size scan is limited to {MAX_SCAN_ENTRIES} entries and 1.5 seconds.")
-        try:
-            with os.scandir(first_directory) as entries:
-                for entry in entries:
-                    budget.check()
-                    if len(children) == 100:
-                        snapshot.note("Immediate children truncated to 100 rows.", True)
-                        break
-                    children.append(measured_row(snapshot, Path(entry.path), budget))
-        except (OSError, CollectionError) as exc:
-            snapshot.note(f"Immediate children unavailable/incomplete: {exc}", True)
+    paths_completed = children_completed = False
+    children_truncated = False
+    try:
+        for path in paths:
+            rows.append(measured_row(snapshot, path, budget))
+            if first_directory is None and path.is_dir():
+                first_directory = path
+        paths_completed = True
+        if first_directory is not None:
+            snapshot.note(f"Immediate children of {first_directory}; at most 100 children.")
+            try:
+                with os.scandir(first_directory) as entries:
+                    for entry in entries:
+                        budget.check()
+                        if len(children) == 100:
+                            snapshot.note("Immediate children truncated to 100 rows.", True)
+                            children_truncated = True
+                            break
+                        children.append(measured_row(snapshot, Path(entry.path), budget))
+                children_completed = not children_truncated
+            except (OSError, CollectionError) as exc:
+                snapshot.note(f"Immediate children unavailable/incomplete: {exc}", True)
+        else:
+            # Empty configuration is a known empty result; inaccessible paths are not.
+            children_completed = not paths or all(row["measurement"] == "complete" for row in rows)
+    finally:
+        for table, completed in ((path_table, paths_completed), (child_table, children_completed)):
+            measured = [row for row in table["rows"] if row["measurement"] != "unavailable"]
+            table["status"] = ("ok" if completed and all(row["measurement"] == "complete" for row in table["rows"])
+                               else "partial" if measured else "error")
     return snapshot.finish(f"{len(rows)} configured paths; {len(children)} children")
 
 
@@ -594,8 +662,14 @@ def collect_worktrees(snapshot, options, budget):
     snapshot.note("Repository roots: " + (json.dumps([str(p) for p in roots], ensure_ascii=True) if roots else "none"))
     snapshot.note(f"Discovery depth {depth}; at most {MAX_DISCOVERY} directory entries. Symlinked roots are resolved; descendant symlinks and dependency/cache/build directories are skipped. Repositories are discovery boundaries.")
     snapshot.note(SIZE_CAVEAT)
-    snapshot.note(f"Size scans: at most {MAX_SCAN_ENTRIES} entries and 1.5 seconds each; {MAX_TOTAL_ENTRIES} entries across the snapshot. Git commands have a 3-second deadline.")
-    rows, seen_paths = [], set()
+    snapshot.note(f"Native du size scans have a 1.5-second command limit; inode counts are unavailable. Python fallback scans: at most {MAX_SCAN_ENTRIES} entries and 1.5 seconds each; {MAX_TOTAL_ENTRIES} entries across the snapshot. Git commands have a 3-second deadline.")
+    worktree_table = snapshot.table("worktrees", "Registered worktrees", [
+        ("path", "Path"), ("branch", "Branch / state"), ("changes", "Working-tree state"),
+        ("locked", "Locked"), ("prunable", "Prunable"), ("bytes", "Allocated bytes"),
+        ("entries", "Inodes counted"), ("measurement", "Measurement")], [], "error")
+    rows, seen_paths = worktree_table["rows"], set()
+    failures = snapshot.failures
+    completed = False
     try:
         repositories = discover_repositories(snapshot, roots, depth, budget)
         for repo in repositories:
@@ -619,7 +693,7 @@ def collect_worktrees(snapshot, options, budget):
                     break
                 row = {"path": str(path), "branch": tree.get("branch", "unavailable"),
                        "locked": tree.get("locked", ""), "prunable": tree.get("prunable", ""),
-                       "changes": "unavailable", "bytes": "unavailable", "measurement": "unavailable"}
+                       "changes": "unavailable", "bytes": "unavailable", "entries": "0", "measurement": "unavailable"}
                 if tree.get("branch") == "bare":
                     row["changes"] = "bare repository"
                 elif not path.is_dir():
@@ -634,13 +708,15 @@ def collect_worktrees(snapshot, options, budget):
                             snapshot.note(str(exc), True)
                 if path.is_dir():
                     row.update(measured_row(snapshot, path, budget))
-                rows.append(row)
+                rows.append({column["key"]: text(row.get(column["key"], ""))
+                             for column in worktree_table["columns"]})
+        completed = True
     except (CollectionError, OSError) as exc:
         snapshot.note(f"Worktree collection incomplete: {exc}", True)
+    finally:
+        worktree_table["status"] = ("ok" if completed and snapshot.failures == failures
+                                    else "partial" if rows else "error")
     snapshot.note("Working-tree state counts porcelain entries; untracked directories count as one entry. Submodule contents are not inspected. No fetch, prune, checkout or index refresh is performed.")
-    snapshot.table("worktrees", "Registered worktrees", [("path", "Path"), ("branch", "Branch / state"),
-                   ("changes", "Working-tree state"), ("locked", "Locked"), ("prunable", "Prunable"),
-                   ("bytes", "Allocated bytes"), ("measurement", "Measurement")], rows)
     return snapshot.finish(f"{len(rows)} worktrees")
 
 

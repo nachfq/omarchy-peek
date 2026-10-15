@@ -56,14 +56,35 @@ else:
 if args.options.get('discoveryDepth') == 0:
     print('{malformed')
 else:
-    rows = [{'name': 'sample <b>literal</b>', 'path': '/fixture/a path with spaces/日本語/' + 'long-directory/' * 10, 'value': '42 MiB'}]
+    def table(ident, title, columns, rows, status='ok'):
+        return dict(id=ident, title=title, columns=[dict(key=k, label=v) for k, v in columns], rows=rows, status=status)
+
     if args.section == 'docker':
-        rows += [{'name': 'entry ' + str(i), 'path': '/fixture/item/' + str(i), 'value': str(i)} for i in range(250)]
-    if args.section == 'worktrees':
-        rows = []
-    status = {'services': 'partial', 'processes': 'error'}.get(args.section, 'ok')
+        tables = [table('containers', 'Containers', [(k, k) for k in ['Names', 'State', 'Status', 'Ports', 'composeProject']],
+            [dict(Names='sample <b>literal</b>', State='running', Status='Up 2 hours', Ports='127.0.0.1:5432', composeProject='日本語')] +
+            [dict(Names='project-' + str(i), State='running' if i < 3 else 'exited', Status='Up 3 hours' if i < 3 else 'Exited', Ports='', composeProject='demo') for i in range(40)]),
+            table('usage', 'Docker disk usage', [(k,k) for k in ['Type', 'TotalCount', 'Active', 'Size', 'Reclaimable']],
+            [dict(Type=t, TotalCount=n, Active='2', Size=size, Reclaimable='0B') for t,n,size in [('Images','18','9.325GB'),('Local Volumes','6','82.87MB'),('Build Cache','24','328.2MB'),('Containers','41','14.3MB')]]),
+            table('images', 'Images', [(k,k) for k in ['Repository','Tag','ID','Size']], [dict(Repository='postgres',Tag='16',ID='abc123',Size='430MB')]),
+            table('volumes', 'Volumes', [(k,k) for k in ['Name','Driver','Scope']], [dict(Name='project-data',Driver='local',Scope='local')])]
+    elif args.section == 'services':
+        tables = [table('services', 'Services', [(k,k) for k in ['scope','unit','active','sub','enablement','description']],
+            [dict(scope=scope, unit=unit, active=active, sub=sub, enablement='enabled', description=desc) for scope,unit,active,sub,desc in [
+                ('user','pipewire.service','active','running','Audio service'),('user','syncthing.service','active','running','File synchronization'),
+                ('user','backup.service','inactive','dead','Scheduled backup'),('system','NetworkManager.service','active','running','Network manager'),
+                ('system','demo.service','not loaded','','Demo service')]]),
+            table('timers','Timers',[(k,k) for k in ['scope','unit','activates','next','last']],[], 'error')]
+    elif args.section == 'worktrees':
+        tables = [table('worktrees','Registered worktrees',[(k,k) for k in ['path','branch','changes','bytes','measurement','entries']],
+            [dict(path='/projects/' + name, branch=branch, changes='clean', bytes=size, measurement=measurement, entries='unavailable') for name,branch,size,measurement in [
+                ('peek','main','32505856','complete'),('workspace','feature/dashboard','4294967296','partial'),
+                ('studio','main','1288490188','complete'),('archived','release','unavailable','unavailable')]], 'partial')]
+    elif args.section == 'disk':
+        tables = [table('paths','Configured paths',[(k,k) for k in ['path','bytes','entries','measurement']],[])]
+    else:
+        tables = [table('processes','Processes',[(k,k) for k in ['pid','name','rss','cwd']],[], 'error')]
+    status = {'services':'partial','processes':'error','worktrees':'partial'}.get(args.section,'ok')
     result = dict(schemaVersion=1, section=args.section, collectedAt='2026-01-01T12:00:00Z', status=status,
-                  summary='Cancelled stale response' if cancelled else ('Access unavailable' if status == 'error' else 'Fixture snapshot'),
-                  tables=[dict(id='fixture', title='Fixture table', columns=[dict(key='name', label='Name'), dict(key='path', label='Path'), dict(key='value', label='Size')], rows=rows)],
-                  notes=['Fixture access limit. <b>plain text</b>'] if status != 'ok' else [])
+                  summary='Cancelled stale response' if cancelled else {'docker':'41 containers','services':'5 services; timers unavailable','processes':'Access unavailable','worktrees':'4 registered worktrees','disk':'No configured paths'}[args.section],
+                  tables=tables, notes=['Fixture accounting note. <b>plain text</b>', 'Measurements are independent; partial sizes are lower bounds.'])
     print(json.dumps(result))

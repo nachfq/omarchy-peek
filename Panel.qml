@@ -10,11 +10,13 @@ Ui.Panel {
     manageIpc: false
     property Item anchorItem: null
     property var hostWidget: null
-    property int selectedSection: 0
+    property int selectedSection: -1
     readonly property alias collector: collector
 
     function refresh() {
-        if (opened) collector.request(Model.sections[selectedSection], settings);
+        if (!opened) return;
+        if (selectedSection === -1) collector.overview(settings);
+        else collector.request(Model.sections[selectedSection], settings);
     }
     function selectSection(index) {
         if (index === selectedSection) return;
@@ -43,6 +45,9 @@ Ui.Panel {
             objectName: 'peekContent'
             anchors.fill: parent
             selectedSection: root.selectedSection
+            snapshots: collector.snapshots
+            errors: collector.errors
+            currentSection: collector.currentSection
             snapshot: collector.snapshot
             loading: collector.loading
             error: collector.error

@@ -119,7 +119,7 @@ class CommandTests(unittest.TestCase):
         code = ("import importlib.util,time;from pathlib import Path;from unittest import mock;"
                 "s=importlib.util.spec_from_file_location('peek'," + repr(str(SCRIPT)) + ");"
                 "p=importlib.util.module_from_spec(s);s.loader.exec_module(p);"
-                "p.COLLECTION_SECONDS=.08;original=Path.lstat;"
+                "p.COLLECTION_SECONDS=.08;p.shutil.which=lambda command:None;original=Path.lstat;"
                 "slow=lambda self:(time.sleep(2),original(self))[1];"
                 "patch=mock.patch.object(Path,'lstat',slow);patch.start();"
                 "p.main(['disk','--options','{\"diskPaths\":[\".\"]}'])")
@@ -307,6 +307,12 @@ class ParserTests(unittest.TestCase):
 
 
 class FilesystemTests(unittest.TestCase):
+    def setUp(self):
+        # Exercise Python fallback accounting independently of host du availability.
+        patch = mock.patch.object(peek.shutil, "which", return_value=None)
+        patch.start()
+        self.addCleanup(patch.stop)
+
     def test_hardlinks_symlinks_and_overlap_are_not_invented_total(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -337,7 +343,7 @@ class FilesystemTests(unittest.TestCase):
             self.assertIn("scan limit reached", problems)
             result = peek.collect("disk", {"diskPaths": [str(root / "missing")]})
             self.assertEqual(result["status"], "error")
-            self.assertEqual(table(result, "paths")[0]["measurement"], "partial")
+            self.assertEqual(table(result, "paths")[0]["measurement"], "unavailable")
 
     def test_expired_measurement_is_never_labeled_complete(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -348,7 +354,7 @@ class FilesystemTests(unittest.TestCase):
             with mock.patch.object(Path, "lstat", slow):
                 result = peek.collect("disk", {"diskPaths": [tmp]}, peek.Budget(seconds=.01))
             self.assertNotEqual(result["status"], "ok")
-            self.assertEqual(table(result, "paths")[0]["measurement"], "partial")
+            self.assertEqual(table(result, "paths")[0]["measurement"], "unavailable")
 
     def test_cyclic_repository_root_is_an_explicit_error(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -477,6 +483,127 @@ class GitIntegrationTests(unittest.TestCase):
         self.assertNotIn("GIT_WORK_TREE", effective)
         self.assertNotIn("GIT_INDEX_FILE", effective)
         self.assertEqual(effective["GIT_OPTIONAL_LOCKS"], "0")
+
+
+class CoverageTests(unittest.TestCase):
+    def test_empty_and_failed_docker_tables_have_distinct_coverage(self):
+        with mock.patch.object(peek, "run_command", return_value=""):
+            result = peek.collect("docker", {})
+        self.assertTrue(all(t["status"] == "ok" and not t["rows"] for t in result["tables"]))
+        with mock.patch.object(peek, "run_command", side_effect=peek.CollectionError("unavailable")):
+            result = peek.collect("docker", {})
+        self.assertTrue(all(t["status"] == "error" for t in result["tables"]))
+        def mixed(args, budget, **kwargs):
+            if "volume" in args:
+                return "malformed"
+            return ""
+        with mock.patch.object(peek, "run_command", side_effect=mixed):
+            result = peek.collect("docker", {})
+        self.assertEqual({t["id"]: t["status"] for t in result["tables"]},
+                         {"containers": "ok", "images": "ok", "volumes": "error", "usage": "ok"})
+
+    def test_service_and_timer_coverage_are_independent(self):
+        def run(args, budget, **kwargs):
+            if "list-timers" in args:
+                raise peek.CollectionError("unavailable")
+            return "[]"
+        with mock.patch.object(peek, "run_command", side_effect=run):
+            result = peek.collect("services", {})
+        self.assertEqual({t["id"]: t["status"] for t in result["tables"]},
+                         {"services": "ok", "timers": "error"})
+        def one_scope(args, budget, **kwargs):
+            if "--user" in args:
+                raise peek.CollectionError("unavailable")
+            return "[]"
+        with mock.patch.object(peek, "run_command", side_effect=one_scope):
+            result = peek.collect("services", {})
+        self.assertTrue(all(t["status"] == "partial" for t in result["tables"]))
+
+    def test_exhausted_size_budget_is_unavailable_and_note_is_grouped(self):
+        budget = peek.Budget()
+        budget.entries = peek.MAX_TOTAL_ENTRIES
+        snapshot = peek.Snapshot("disk")
+        with mock.patch.object(peek.shutil, "which", return_value=None):
+            for path in (Path("one"), Path("two")):
+                row = peek.measured_row(snapshot, path, budget)
+                self.assertEqual(row["bytes"], "unavailable")
+                self.assertEqual(row["entries"], "0")
+                self.assertEqual(row["measurement"], "unavailable")
+        self.assertEqual(len(snapshot.data["notes"]), 1)
+
+    def test_worktree_deadline_preserves_completed_rows(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            paths = [root / "first", root / "second"]
+            for path in paths:
+                path.mkdir()
+            raw = "".join(f"worktree {path}\x00branch refs/heads/main\x00\x00" for path in paths)
+            measurement = {"bytes": "4096", "entries": "1", "measurement": "complete"}
+            with mock.patch.object(peek, "discover_repositories", return_value=[root]), \
+                 mock.patch.object(peek, "run_command", return_value=raw), \
+                 mock.patch.object(peek, "worktree_status", return_value=""), \
+                 mock.patch.object(peek, "allocated_size", side_effect=[(measurement, []), peek.DeadlineReached()]):
+                result = peek.collect("worktrees", {"repositoryRoots": [str(root)]})
+            self.assertEqual(result["status"], "partial")
+            self.assertEqual(len(table(result, "worktrees")), 1)
+            self.assertEqual(table(result, "worktrees")[0]["bytes"], "4096")
+            self.assertEqual(result["tables"][0]["status"], "partial")
+            self.assertTrue(any("deadline" in note for note in result["notes"]))
+
+    def test_native_size_zero_is_measured_without_inode_count(self):
+        with mock.patch.object(peek.shutil, "which", return_value="/usr/bin/du"), \
+             mock.patch.object(peek, "run_command", return_value="0\tfixture\x00") as run:
+            row, problems = peek.allocated_size(Path("fixture"), peek.Budget())
+        self.assertEqual(row, {"bytes": "0", "entries": "unavailable", "measurement": "complete"})
+        self.assertEqual(problems, [])
+        self.assertEqual(run.call_args.kwargs["timeout"], 1.5)
+        self.assertEqual(run.call_args.args[0][-2:], ["--", "fixture"])
+
+    def test_native_size_failure_and_malformed_output_fall_back(self):
+        fallback = ({"bytes": "8", "entries": "1", "measurement": "partial"}, ["scan limit reached"])
+        for output in ("12\twrong\x00", "12\tfixture", "-1\tfixture\x00", "12\tfixture\x00extra\x00",
+                       peek.CollectionError("du timed out")):
+            with self.subTest(output=output), \
+                 mock.patch.object(peek.shutil, "which", return_value="/usr/bin/du"), \
+                 mock.patch.object(peek, "run_command", side_effect=output if isinstance(output, Exception) else None,
+                                   return_value=output), \
+                 mock.patch.object(peek, "allocated_size_python", return_value=fallback) as native:
+                self.assertEqual(peek.allocated_size(Path("fixture"), peek.Budget()), fallback)
+                native.assert_called_once()
+
+    def test_unmeasured_disk_tables_are_not_successful_empty_results(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(peek.shutil, "which", return_value=None):
+            result = peek.collect("disk", {"diskPaths": [str(Path(tmp) / "missing")]})
+        self.assertTrue(all(t["status"] == "error" for t in result["tables"]))
+        self.assertEqual(table(result, "paths")[0]["bytes"], "unavailable")
+        for section, key in (("disk", "diskPaths"), ("worktrees", "repositoryRoots")):
+            result = peek.collect(section, {key: []})
+            self.assertTrue(all(t["status"] == "ok" for t in result["tables"]))
+
+    @unittest.skipUnless(shutil.which("du"), "native du is unavailable")
+    def test_native_scan_preserves_hardlink_and_symlink_accounting(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "space ü\nname"
+            root.mkdir()
+            (root / "data").write_bytes(b"x" * 8192)
+            os.link(root / "data", root / "hardlink")
+            (root / "cycle").symlink_to(root, target_is_directory=True)
+            native, problems = peek.allocated_size(root, peek.Budget())
+            fallback, fallback_problems = peek.allocated_size_python(root, peek.Budget())
+            self.assertEqual(problems, [])
+            self.assertEqual(fallback_problems, [])
+            self.assertEqual(native["measurement"], "complete")
+            self.assertEqual(native["bytes"], fallback["bytes"])
+            self.assertEqual(native["entries"], "unavailable")
+
+    def test_native_global_deadline_does_not_start_fallback(self):
+        with mock.patch.object(peek.shutil, "which", return_value="/usr/bin/du"), \
+             mock.patch.object(peek, "run_command", side_effect=peek.DeadlineReached()), \
+             mock.patch.object(peek, "allocated_size_python") as fallback:
+            with self.assertRaises(peek.DeadlineReached):
+                peek.allocated_size(Path("fixture"), peek.Budget())
+            fallback.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -2,9 +2,12 @@
 
 **A quick look at your system, when you ask for it.**
 
-Peek opens from the Omarchy bar and shows a snapshot of Docker, services,
-processes, worktrees and disk usage. Select a section to inspect it, or press
-**Refresh** for a new snapshot. Closing the panel stops active collection.
+Peek opens from the Omarchy bar with a compact **Overview** of Docker disk usage,
+running services and worktrees. Each summary appears as its snapshot finishes.
+Choose a section for resource lists, search and full details; **Refresh** takes a
+new snapshot. Closing the panel stops active collection.
+
+![Peek Overview with synthetic sample data](docs/images/overview.png)
 
 | Section | What it shows |
 | --- | --- |
@@ -21,9 +24,8 @@ It runs collectors only on demand, with no periodic polling or separate daemon.
 ## Install
 
 Requires **Omarchy 4 with Omarchy Shell**, Quickshell and Python 3. Git, systemd,
-and `ss` (iproute2) supply their corresponding sections. Python reads filesystem
-allocation directly for directory sizes. Docker
-is optional; its section reports when the CLI or daemon is unavailable.
+and `ss` (iproute2) supply their corresponding sections. Bounded GNU `du` queries measure directory sizes when available, with a Python
+fallback. Docker is optional; its section reports when the CLI or daemon is unavailable.
 
 ```sh
 omarchy plugin add https://github.com/nachfq/omarchy-peek.git --enable
@@ -32,9 +34,10 @@ omarchy plugin add https://github.com/nachfq/omarchy-peek.git --enable
 The installer uses the repository's default branch. GitHub release tags identify
 validated versions; installation does not select the latest release tag.
 
-Open **Peek** from the bar, choose a section and inspect the results. The data is
+Open **Peek** from the bar for the Overview, then choose a section for details. The data is
 an on-demand snapshot, not a live monitor. Large directory scans can take longer
-than service/process queries; progress and collection limits remain visible.
+than service/process queries. Loading and incomplete states remain visible;
+accounting notes and technical diagnostics are available on demand.
 
 See [Usage and configuration](docs/USAGE.md) for choosing repository and disk
 paths, and [Development](docs/DEVELOPMENT.md) for running checks.
