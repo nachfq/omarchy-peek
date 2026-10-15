@@ -41,4 +41,10 @@ For follow-up changes, run the collector unit tests, manifest/QML validation, UI
 input tests at scales 1 and 1.5, and the actual collector/UI integration harness
 as appropriate. `docs/DEVELOPMENT.md` documents the isolated checks. Native
 Wayland testing is an optional manual desktop check; outside clicks dismiss its
-popup. No plugin was installed into the user's running shell during delivery.
+popup. After release, Peek was installed and placed beside Yuragi at the user's
+request. Host-specific settings remain outside Git.
+
+Active delivery: [At-a-glance UI/UX](plans/at-a-glance/plan.md). The user requested
+an autonomous improvement iteration through a new release and installation update.
+The current priority is visible resource summaries and progressive disclosure of
+details, preserving truthful incomplete measurements and on-demand behavior.

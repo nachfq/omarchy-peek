@@ -11,13 +11,13 @@ fi
 lint_dir="$(mktemp -d)"
 trap 'rm -rf "$lint_dir"' EXIT
 ln -s "$shell_dir" "$lint_dir/qs"
-"$lint_bin" -I "$lint_dir" -I "$shell_dir" BarWidget.qml Panel.qml PeekContent.qml Collector.qml Request.qml
+"$lint_bin" -I "$lint_dir" -I "$shell_dir" BarWidget.qml Panel.qml PeekContent.qml Collector.qml Request.qml SummaryCard.qml
 python3 - <<'PY'
 import json
 from pathlib import Path
 manifest = json.loads(Path('manifest.json').read_text())
 assert manifest['schemaVersion'] == 1
-assert manifest['id'] == 'nachfq.peek' and manifest['version'] == '0.1.0'
+assert manifest['id'] == 'nachfq.peek' and manifest['version'] == '0.2.0'
 assert manifest['license'] == 'MIT' and manifest['author'] == 'Nacho fq'
 assert manifest['kinds'] == ['bar-widget']
 assert Path(manifest['entryPoints']['barWidget']).is_file()

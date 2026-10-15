@@ -98,6 +98,7 @@ def main():
                 assert counts['failed'] == 0 and counts['passed'] >= 1, counts
                 if mode == 'real':
                     assert output.count('PEEK_REAL_SECTION ') == 5, 'Not all real sections were checked'
+                    assert output.count('PEEK_REAL_OVERVIEW verified') == 1, 'Real overview was not checked'
                 else:
                     assert pid_file.is_file(), 'Real collector never started the blocking command'
                     pid = int(pid_file.read_text())
