@@ -12,7 +12,8 @@ FocusScope {
     property var snapshot: null
     property bool loading: false
     property string error: ''
-    readonly property Item initialFocus: sectionButtons.itemAt(selectedSection)
+    readonly property Item initialFocus: sectionButtons.count > selectedSection
+        ? sectionButtons.itemAt(selectedSection) : null
     readonly property var displayRows: Model.rows(snapshot, filter.text)
     signal sectionRequested(int index)
     signal refreshRequested()

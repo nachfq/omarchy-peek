@@ -12,6 +12,7 @@ omarchy plugin validate .
 scripts/check_qml.sh
 python3 scripts/test_ui.py
 QT_SCALE_FACTOR=1.5 python3 scripts/test_ui.py
+python3 scripts/test_integration.py
 ```
 
 Collector tests use temporary directories and synthetic command output. UI tests
@@ -23,6 +24,19 @@ modify the user's installed shell configuration.
 QML checks require Omarchy Shell and Qt/Quickshell. Set `OMARCHY_PATH` to a separate
 Omarchy checkout when testing against a reference version. CI pins the Omarchy
 4.0.4 source contract and uses an Arch environment for the Qt/Quickshell tools.
+
+The integration harness runs all five sections through the actual Python/QML
+boundary, then verifies closing a blocked command removes its child process.
+It uses a temporary repository and disk directory; other sections query available
+system tools read-only, including the current Docker context. Missing tools and
+permissions may legitimately produce partial or unavailable snapshots.
+
+On a running Wayland desktop, `python3 scripts/test_integration.py --wayland`
+briefly opens a separate native popup to verify focus, placement and Escape.
+Run this manual check without interacting with the desktop: outside clicks dismiss
+the popup. It does not install the plugin or change the running shell configuration.
+
+To capture synthetic UI data: `python3 scripts/test_ui.py --capture /tmp/peek.png`.
 
 ## Read-only manual collection
 

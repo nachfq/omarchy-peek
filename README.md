@@ -21,7 +21,8 @@ It runs collectors only on demand, with no periodic polling or separate daemon.
 ## Install
 
 Requires **Omarchy 4 with Omarchy Shell**, Quickshell and Python 3. Git, systemd,
-`ss` (iproute2), and `du` (coreutils) supply their corresponding sections. Docker
+and `ss` (iproute2) supply their corresponding sections. Python reads filesystem
+allocation directly for directory sizes. Docker
 is optional; its section reports when the CLI or daemon is unavailable.
 
 ```sh

@@ -61,23 +61,39 @@ untouched by automated tests; isolated runtime/config locations cover integratio
   implementers branched from it. The public default branch is `main`.
 
 ### D2 Parallel implementation
-- **T2** (S1–S3, S5), active, depends T1, owner collector implementer:
+- **T2** (S1–S3, S5), done, depends T1, owner collector implementer:
   implement `scripts/peek.py`, `peek/` package if needed and
   `tests/test_collectors.py`/collector fixtures. Verify portable unit tests,
-  failure/cancellation behavior and real read-only smoke collection.
-- **T3** (S1, S3–S5), active, depends T1, owner UI implementer: implement root QML,
+  failure/cancellation behavior and real read-only smoke collection. Delivered in
+  `f1e087f` with row-limit adjustment `c9f9d96`: 31 tests pass, all five real
+  sections return protocol snapshots. Independent review fixed Git filter execution
+  and deadline handling; the final deadline regression and cap adjustment are
+  included in the coordinator's integration review.
+- **T3** (S1, S3–S5), done, depends T1, owner UI implementer: implement root QML,
   `Model.js` if needed, `manifest.json`, `tests/ui/`, `tests/*qml*`,
   `scripts/check_qml.sh`, `scripts/test_ui.py`. Verify manifest, lint and native
-  input/lifecycle tests at scales 1 and 1.5 using a fake collector.
-- **T4** (S6), active, depends T1, owner coordinator: README/license, usage and
+  input/lifecycle tests at scales 1 and 1.5 using a fake collector. Delivered in
+  `a0a1b11`, independently reviewed: 15 QtTest counts and 21 requests per scale,
+  no overlap or surviving fixture children. Complete synthetic previews inspected
+  at both scales. T5 found and corrected a delayed-Repeater focus binding in native Wayland.
+- **T4** (S6), done, depends T1, owner coordinator: README/license, usage and
   development docs, portable and QML CI, release validation scripts as needed.
+  CI pins Omarchy 4.0.4 at `c668141e9c42b13c80c9ca4ea108e11708c5e8a5`;
+  manifest/lint and both UI scales pass locally against that exact reference.
 
 ### D3 Integrate and publish
-- **T5** (S1–S6), pending, depends T2–T4, owner coordinator: inspect worker diffs,
+- **T5** (S1–S6), done, depends T2–T4, owner coordinator: inspect worker diffs,
   integrate reviewed commits, verify all collectors and real popup lifecycle,
   visually inspect a rendered popup, run independent cumulative review and fix
-  concrete issues. Record actual evidence and limits.
-- **T6** (S6–S7), pending, depends T5, owner coordinator: finish plan evidence,
+  concrete issues. Record actual evidence and limits. Completed: independent
+  integration review found no actionable defects and independently reran 31 tests,
+  official manifest/QML checks, UI scale 1 and real offscreen integration.
+  Both UI scales pass after the native focus correction. Native focus, placement,
+  Escape and actual collector cancellation passed; six diagnostic repeats passed
+  after two earlier transient dismissals/results failed the manual harness.
+  Their cause was not established; desktop interaction can dismiss the popup.
+  The harness now identifies a popup dismissal explicitly.
+- **T6** (S6–S7), active, depends T5, owner coordinator: finish plan evidence,
   publish integration PR, verify CI, merge under user's release authorization,
   validate default-branch install content and publish `v0.1.0` release.
 
@@ -85,6 +101,8 @@ untouched by automated tests; isolated runtime/config locations cover integratio
 
 Autonomous scope: D1–D3, explicitly requested by the user. No intermediate human
 checkpoint is required for this agreed MVP; unresolved consequential product
-changes must still be surfaced. Current checkpoint: T2 and T3 are running in independent
-implementer worktrees; the coordinator is preparing T4 documentation and CI.
-Application validation awaits implementation; foundation checks passed.
+changes must still be surfaced. Current checkpoint: both worker branches are integrated. The 31 collector tests
+and real Python/QML integration pass, including cancellation of a blocked command.
+Native Wayland focus, placement and Escape pass for all five sections; cancellation
+also passes. T5 is complete with no actionable review findings. T6 is publishing the integration
+PR and checking remote CI before merging and releasing v0.1.0.

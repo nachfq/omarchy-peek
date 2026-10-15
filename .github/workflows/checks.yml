@@ -36,3 +36,5 @@ jobs:
           chown -R peek-ci "$GITHUB_WORKSPACE"
           runuser -u peek-ci -- python3 scripts/test_ui.py
           runuser -u peek-ci -- env QT_SCALE_FACTOR=1.5 python3 scripts/test_ui.py
+      - name: Exercise the real collector protocol and cancellation
+        run: runuser -u peek-ci -- python3 scripts/test_integration.py
