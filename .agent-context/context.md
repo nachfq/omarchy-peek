@@ -51,3 +51,16 @@ section details and diagnostics use progressive disclosure. Incomplete and
 unavailable measurements remain explicit. The installed shell needed one restart
 to replace cached plugin QML after update; its settings and placement were preserved.
 No active delivery remains; use subsequent user feedback to bound the next change.
+
+## Marketplace submission
+
+The user explicitly authorized marketplace submission after accepting v0.2.0.
+This extends the original MVP scope exclusion; it does not authorize approving
+or merging changes in the marketplace's repository. Yuragi was submitted through
+[issue #7102](https://github.com/omacom/omarchy-plugin-marketplace/issues/7102),
+not a contributor PR. Follow the current
+[CLI submission guide](https://github.com/omacom/omarchy-plugin-marketplace/blob/main/SUBMISSION.md).
+The listing uses category `System` and tags `bar`, `quickshell`, `system`.
+The root `preview.png` is a synthetic fixture image, with no private host data.
+Keep the upstream commit stable while exact-commit validation and maintainer
+review are pending. Listing approval belongs to marketplace maintainers.
