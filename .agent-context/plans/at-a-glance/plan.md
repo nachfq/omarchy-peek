@@ -1,5 +1,5 @@
 ---
-{"id":"at-a-glance","title":"Release Peek 0.2.0 with a readable resource overview","status":"active","depends_on":["mvp"]}
+{"id":"at-a-glance","title":"Release Peek 0.2.0 with a readable resource overview","status":"done","depends_on":["mvp"]}
 ---
 
 # Peek at a glance
@@ -72,7 +72,7 @@ resources as belonging to an agent. User services is an observable scope.
   39 requests per default run, no overlap or surviving fixture children.
   Overview, Services and Worktrees previews inspected; real-data Overview checked
   in an isolated private rendering. Pinned QML/manifest validation passes.
-- **T4** (S6), active, coordinator, depends T2,T3: integrate, inspect rendered
+- **T4** (S6), done, coordinator, depends T2,T3: integrate, inspect rendered
   real/synthetic results, verify integration, update docs/version and independent
   review. Publish PR/release and update installed plugin.
   Integration evidence: real Overview plus all five sections and cancellation pass
@@ -84,10 +84,20 @@ resources as belonging to an agent. User services is an observable scope.
   Final helper checks: scale 1 passed in focused independent review; scale 1.5
   passed locally. No production files changed after the full review. The original
   intermittent failure cause was not proven.
-  Publication, CI and installed-update evidence will be recorded on completion.
+  Published through PR #3 after both GitHub Checks runs passed (collectors and
+  QML/native UI/integration). Release v0.2.0 targets the exact merged commit
+  `babd77c1eeb0215f285654c5546bf316a29f7cd5`; a fresh public clone matched that
+  SHA and passed official manifest validation. The release is public, stable and
+  latest: https://github.com/nachfq/omarchy-peek/releases/tag/v0.2.0.
+  Installed plugin updated to the release SHA, clean, enabled beside Yuragi with
+  unchanged Peek settings. Plugin rescan retained the old in-memory QML; a shell
+  restart loaded the new Overview, verified visually on the actual desktop.
+  Private desktop captures remain outside Git. The update troubleshooting note
+  records this observed reload requirement. No packaged Omarchy files changed.
 
-## Next delivery
+## Delivery outcome
 
-User explicitly requested one autonomous UI/UX improvement iteration through a
-new release. Execute T1–T4 without intermediate permission checkpoints. Keep
-changes within this iteration; maintain the published MVP plan as history.
+The authorized UI/UX iteration is released and installed. No implementation tasks
+remain in this delivery. Filesystem measurements retain explicit scope/coverage
+limits; no background polling, cleanup, inference or agent attribution was added.
+Future design feedback belongs to a separate bounded iteration.
